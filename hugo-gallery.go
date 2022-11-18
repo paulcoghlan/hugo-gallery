@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"log"
 	"os"
-	"path"
+	"os/exec"
 	"strings"
 	"syscall"
 	"text/template"
@@ -16,22 +18,15 @@ import (
 var postTemplate string = `---
 title: {{.Title}}
 date: "{{.Date}}"
-image_name: {{.ImagePath}}
-previous_image: {{.PreviousImage}}
-next_image: {{.NextImage}}
-next_post_path: {{.NextPostPath}}
-previous_post_path: {{.PreviousPostPath}}
+type: "gallery"
+cover: {{ .Cover }}
 ---
 `
 
 type GalleryItem struct {
-	Title            string
-	Date             string
-	ImagePath        string
-	NextImage        string
-	PreviousImage    string
-	NextPostPath     string
-	PreviousPostPath string
+	Title string
+	Date  string
+	Cover string
 }
 
 func check(e error) int {
@@ -47,12 +42,12 @@ func check(e error) int {
 
 func main() {
 	if len(os.Args) < 4 {
+		// e.g. hugo-gallery /mnt/d/photos/2022/hawaii gallery/2022/hawaii "Hawaii Trip"
 		fmt.Printf("Usage: %s <Source Path> <Destination Section> <Title> [BaseUrl]\n", os.Args[0])
 		syscall.Exit(1)
 	}
 
-	sourcePath := os.Args[1]
-	staticRoot := strings.Replace(os.Args[1], "static/", "", 1) + "/"
+	sourcePath := os.Args[1] + "/"
 	section := os.Args[2] + "/"
 	title := os.Args[3]
 	var baseUrl = ""
@@ -70,75 +65,56 @@ func main() {
 		}
 	}
 
-	postList, err := ioutil.ReadDir(sourcePath)
+	imgList, err := ioutil.ReadDir(sourcePath)
 	if err != nil {
 		fmt.Printf("Source path <%s> not found!\n", sourcePath)
 		os.Exit(1)
 	}
 
-	for index, file := range postList {
-		previousImage, nextImage := getPreviousAndNextPost(index, postList)
-		generatePost(index, file, staticRoot, contentPath, title, previousImage, nextImage, section, baseUrl)
-	}
-}
-
-func getPreviousAndNextPost(index int, postList []os.FileInfo) (previous os.FileInfo, next os.FileInfo) {
-	if index+1 < len(postList) {
-		next = postList[index+1]
-	}
-	if index >= 1 {
-		previous = postList[index-1]
-	}
-	return
-}
-
-func stripExtension(baseUri string) (fileName string) {
-	extension := path.Ext(baseUri)
-	fileName = baseUri[0 : len(baseUri)-len(extension)]
-	return
-}
-
-func buildPathFromFileInfo(imageFile os.FileInfo, sourcePath string, excludeExtension bool, baseUrl string) (imagePath string) {
-	if imageFile != nil {
-		fileName := imageFile.Name()
-		if excludeExtension {
-			fileName = stripExtension(imageFile.Name())
-		}
-		if baseUrl != "" && !excludeExtension {
-			imagePath = baseUrl + "/" + sourcePath + fileName
-		} else {
-			imagePath = sourcePath + fileName
+	coverImage := ""
+	latestModified := time.Date(1970, 0, 0, 0, 0, 0, 0, time.UTC)
+	for _, file := range imgList {
+		// Ignore directories and .DS files
+		if !file.IsDir() && strings.Index(file.Name(), ".") > 0 {
+			coverImage = file.Name()
+			err = copyFile(sourcePath+file.Name(), contentPath+file.Name())
+			if err != nil {
+				fmt.Printf("Failed to copy %s\n", file.Name())
+				os.Exit(1)
+			}
+			dateTimeOriginal := readPhotoDate(contentPath + file.Name())
+			if dateTimeOriginal.After(latestModified) {
+				latestModified = dateTimeOriginal
+			}
 		}
 	}
-	return
+	generateExif(contentPath)
+	generateGallery(sourcePath, contentPath, title, coverImage, latestModified, section, baseUrl)
 }
 
-func generatePost(index int, file os.FileInfo, sourcePath string, contentPath string, title string, previousImage os.FileInfo, nextImage os.FileInfo, section string, baseUrl string) {
-	nextImagePath := buildPathFromFileInfo(nextImage, sourcePath, false, baseUrl)
-	previousImagePath := buildPathFromFileInfo(previousImage, sourcePath, false, baseUrl)
-	nextPostPath := buildPathFromFileInfo(nextImage, section, true, baseUrl)
-	previousPostPath := buildPathFromFileInfo(previousImage, section, true, baseUrl)
-	currentImagePath := ""
-	if baseUrl != "" {
-		currentImagePath = baseUrl + "/" + sourcePath + file.Name()
-	} else {
-		currentImagePath = sourcePath + file.Name()
-	}
+func generateExif(contentPath string) {
+	outputPattern := fmt.Sprintf("-w %s%%f.%%e.json", contentPath)
+	// fmt.Printf("outputPattern %s\n", outputPattern)
+	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("/usr/bin/exiftool %s -json -struct -EXIF:All -XMP:Title -Composite:LensSpec %s", outputPattern, contentPath))
 
+	fmt.Printf("running %s\n", cmd)
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func generateGallery(sourcePath string, contentPath string, title string, coverImage string, date time.Time, section string, baseUrl string) {
 	galleryItem := GalleryItem{
-		Title:            title,
-		ImagePath:        currentImagePath,
-		Date:             time.Now().Format("2006-01-02"),
-		NextImage:        nextImagePath,
-		PreviousImage:    previousImagePath,
-		NextPostPath:     nextPostPath,
-		PreviousPostPath: previousPostPath,
+		Title: title,
+		Date:  date.Format("2006-01-02"),
+		Cover: coverImage,
 	}
 
 	var buffer bytes.Buffer
 	generateTemplate(galleryItem, &buffer)
 
-	filePath := contentPath + stripExtension(file.Name()) + ".md"
+	filePath := contentPath + "index.md"
+	fmt.Printf("Create markdown %s\n", filePath)
 	f, err := os.Create(filePath)
 	check(err)
 	defer f.Close()
@@ -150,7 +126,46 @@ func generatePost(index int, file os.FileInfo, sourcePath string, contentPath st
 
 func generateTemplate(galleryItem GalleryItem, buffer *bytes.Buffer) {
 	t := template.New("post template")
-	t, _ = t.Parse(postTemplate)
-	err := t.Execute(buffer, galleryItem)
+	t, err := t.Parse(postTemplate)
 	check(err)
+	err = t.Execute(buffer, galleryItem)
+	check(err)
+}
+
+func readPhotoDate(sourcePath string) time.Time {
+	layout := "2006-01-02 15:04:05"
+	tag := "DateTimeOriginal"
+	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("/usr/bin/exiftool -S -%s -d '%%Y-%%m-%%d %%H:%%M:%%S' %s", tag, sourcePath))
+	fmt.Printf("running %s\n", cmd)
+	output, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	split := strings.SplitAfter(string(output), tag+":")
+	dateString := strings.TrimSpace(split[1])
+	t, err := time.Parse(layout, dateString)
+	if err != nil {
+		fmt.Println("Error while parsing date :", err)
+	}
+
+	return t
+}
+
+func copyFile(in string, out string) error {
+	fmt.Printf("Copy file %s to %s\n", in, out)
+	srcFile, err := os.Open(in)
+	check(err)
+	defer srcFile.Close()
+
+	destFile, err := os.Create(out)
+	check(err)
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, srcFile)
+	check(err)
+
+	err = destFile.Sync()
+	check(err)
+
+	return nil
 }
