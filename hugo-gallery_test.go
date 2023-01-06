@@ -15,13 +15,13 @@ func TestGeneratePost(t *testing.T) {
 }
 
 func TestGenerateTemplate(t *testing.T) {
-	testItem := GalleryItem{
+	testItem := PostItem{
 		Title: "test_title",
 		// ImagePath:        "sample-site/static/images/image1.jpg",
 		Date: "2006-01-02",
 	}
 	var buffer bytes.Buffer
-	generateTemplate(testItem, &buffer)
+	generateGalleryPost(testItem, &buffer)
 
 }
 
