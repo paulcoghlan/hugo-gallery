@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"text/template"
 	"time"
+
+	"github.com/rwcarlsen/goexif/exif"
+	"github.com/rwcarlsen/goexif/mknote"
 )
 
 const slash = string(os.PathSeparator)
@@ -97,7 +98,7 @@ func main() {
 				fmt.Printf("Failed to copy %s\n", file.Name())
 				os.Exit(1)
 			}
-			dateTimeOriginal := readPhotoDate(filepath.Join(contentPath, file.Name()))
+			dateTimeOriginal := getTaken(filepath.Join(contentPath, file.Name()))
 			if dateTimeOriginal.After(latestModified) {
 				latestModified = dateTimeOriginal
 			}
@@ -196,25 +197,6 @@ func generateCollectionPost(galleryItem PostItem, buffer *bytes.Buffer) {
 	check(err)
 }
 
-func readPhotoDate(sourcePath string) time.Time {
-	layout := "2006-01-02 15:04:05"
-	tag := "DateTimeOriginal"
-	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("/opt/homebrew/bin/exiftool -S -%s -d '%%Y-%%m-%%d %%H:%%M:%%S' %s", tag, sourcePath))
-	fmt.Printf("running %s\n", cmd)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	split := strings.SplitAfter(string(output), tag+":")
-	dateString := strings.TrimSpace(split[1])
-	t, err := time.Parse(layout, dateString)
-	if err != nil {
-		fmt.Println("Error while parsing date :", err)
-	}
-
-	return t
-}
-
 func copyFile(in string, out string) error {
 	fmt.Printf("Copy file: %s to: %s\n", in, out)
 	srcFile, err := os.Open(in)
@@ -232,4 +214,20 @@ func copyFile(in string, out string) error {
 	check(err)
 
 	return nil
+}
+
+func getTaken(name string) time.Time {
+	f, err := os.Open(name)
+	check(err)
+
+	// Optionally register camera makenote data parsing - currently Nikon and
+	// Canon are supported.
+	exif.RegisterParsers(mknote.All...)
+
+	x, err := exif.Decode(f)
+	check(err)
+
+	tm, _ := x.DateTime()
+	// fmt.Println("Taken: ", tm)
+	return tm
 }
