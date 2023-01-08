@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,8 +17,6 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 	"github.com/rwcarlsen/goexif/mknote"
 )
-
-const slash = string(os.PathSeparator)
 
 var galleryTemplate string = `---
 title: {{.Title}}
@@ -63,14 +62,14 @@ func main() {
 
 	hugoDir := os.Getenv("HUGO_DIR")
 	assetsDir := filepath.Join(hugoDir, "assets")
-	sourcePath := os.Args[1] + slash
-	section := os.Args[2] + slash
+	sourcePath := filepath.Clean(os.Args[1])
+	section := os.Args[2]
 	title := os.Args[3]
 	contentPath := filepath.Join(hugoDir, "content", section)
 
 	src, err := os.Stat(contentPath)
 	if err != nil || !src.IsDir() {
-		err = os.Mkdir(contentPath, 0755)
+		err = os.MkdirAll(contentPath, 0755)
 		if err != nil {
 			fmt.Printf("content directory <%s> not found! Are you in a hugo directory?\n", contentPath)
 			os.Exit(1)
@@ -98,21 +97,21 @@ func main() {
 				fmt.Printf("Failed to copy %s\n", file.Name())
 				os.Exit(1)
 			}
-			dateTimeOriginal := getTaken(filepath.Join(contentPath, file.Name()))
-			if dateTimeOriginal.After(latestModified) {
-				latestModified = dateTimeOriginal
-			}
 		}
 	}
 	generateGallery(contentPath, title, coverImage, latestModified)
 
 	collectionExists := parentPost(contentPath)
-	fmt.Printf("collectionExists is %v\n", collectionExists)
-	if !collectionExists {
-		collectionDir := parentDir(contentPath)
+	fmt.Printf("contentPath is %s, collectionExists is %v\n", contentPath, collectionExists)
+
+	// Walk up directory tree from `contentPath` to ./gallery to see if we need to create a `/content/gallery/<collectionName>.md`
+	collectionDir := parentDir(contentPath)
+	for !collectionExists && (filepath.Base(collectionDir) != "gallery") {
 		baseDir := filepath.Dir(collectionDir)
 		collectionName := filepath.Base(collectionDir)
+		fmt.Printf("collectionDir: %s, baseDir: %s, collectionName %s\n", collectionDir, baseDir, collectionName)
 		generateCollection(sourcePath, assetsDir, baseDir, title, coverImage, latestModified, collectionName)
+		collectionDir = parentDir(collectionDir)
 	}
 }
 
@@ -217,17 +216,21 @@ func copyFile(in string, out string) error {
 }
 
 func getTaken(name string) time.Time {
+	fmt.Printf("Get Exif on file: %s\n", name)
 	f, err := os.Open(name)
 	check(err)
+	defer f.Close()
 
 	// Optionally register camera makenote data parsing - currently Nikon and
 	// Canon are supported.
 	exif.RegisterParsers(mknote.All...)
 
 	x, err := exif.Decode(f)
-	check(err)
+	if err != nil && exif.IsCriticalError(err) {
+		log.Fatal(err)
+	}
 
 	tm, _ := x.DateTime()
-	// fmt.Println("Taken: ", tm)
+	fmt.Println("Taken: ", tm)
 	return tm
 }

@@ -2,8 +2,9 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"reflect"
 	"testing"
+	"time"
 )
 
 // func TestMain(m *testing.M) {
@@ -122,8 +123,29 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-func Test_readPhotoDate(t *testing.T) {
-	path := "/mnt/d/pixse1/content/gallery/2022/freddie-teeth/L1020884.jpg"
-	output := readPhotoDate(path)
-	fmt.Printf("Output is: %s\n", output)
+func Test_getTaken(t *testing.T) {
+	type args struct {
+		name string
+	}
+	taken := time.Unix(1653898754, 0)
+	tests := []struct {
+		name string
+		args args
+		want time.Time
+	}{
+		{
+			name: "jpg read",
+			args: args{
+				name: "test/source/a/b/c/d.jpg",
+			},
+			want: taken,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getTaken(tt.args.name); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getTaken() = %v, want %v", got.Unix(), tt.want)
+			}
+		})
+	}
 }
