@@ -1,127 +1,13 @@
 package main
 
 import (
-	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 )
-
-// func TestMain(m *testing.M) {
-// 	exec.Command("test.sh")
-// }
-
-func TestGeneratePost(t *testing.T) {
-
-}
-
-func TestGenerateTemplate(t *testing.T) {
-	testItem := PostItem{
-		Title: "test_title",
-		// ImagePath:        "sample-site/static/images/image1.jpg",
-		Date: "2006-01-02",
-	}
-	var buffer bytes.Buffer
-	generateGalleryPost(testItem, &buffer)
-
-}
-
-// func TestStripExtension(t *testing.T) {
-// 	testFileName := "mysample.jpg"
-// 	res := stripExtension(testFileName)
-// 	if res != "mysample" {
-// 		t.Error("For", testFileName, "expected", "mysample", "got", res)
-// 	}
-
-// 	testFileName = "my.sample.jpg"
-// 	res = stripExtension(testFileName)
-// 	if res != "my.sample" {
-// 		t.Error("For", testFileName, "expected", "my.sample", "got", res)
-// 	}
-// }
-
-func TestBuildPathFromFileInfo(t *testing.T) {
-	// postList, err := ioutil.ReadDir("sample-site/static/images")
-	// if err != nil {
-	// 	t.Error("Expected files in sample-site/static/images", err)
-	// }
-
-	// firstPath := buildPathFromFileInfo(postList[0], "sample-site/static/images/", true, "")
-	// if firstPath != "sample-site/static/images/image1" {
-	// 	t.Error("Expected", "sample-site/static/images/image1", "got", firstPath)
-	// }
-
-	// firstPath = buildPathFromFileInfo(postList[0], "sample-site/static/images/", false, "")
-	// if firstPath != "sample-site/static/images/image1.jpg" {
-	// 	t.Error("Expected", "sample-site/static/images/image1.jpg", "got", firstPath)
-	// }
-
-	// firstPath = buildPathFromFileInfo(postList[0], "sample-site/static/images/", false, "s3.amazon.com")
-	// if firstPath != "s3.amazon.com/sample-site/static/images/image1.jpg" {
-	// 	t.Error("Expected", "s3.amazon.com/sample-site/static/images/image1.jpg", "got", firstPath)
-	// }
-
-}
-
-// func TestGetPreviousAndNextPost(t *testing.T) {
-// 	postList, err := ioutil.ReadDir("sample-site/static/images")
-// 	if err != nil {
-// 		t.Error("Expected files in sample-site/static/images", err)
-// 	}
-
-// 	// Test for start of list
-// 	previousImage, nextImage := getPreviousAndNextPost(0, postList)
-// 	if previousImage != nil {
-// 		t.Error("Expected previousImage", nil, "got", previousImage)
-// 	}
-// 	if nextImage.Name() != "image2.jpg" {
-// 		t.Error("Expected nextImage", "image2.jpg", "got", nextImage.Name())
-// 	}
-
-// 	// Test for middle of list
-// 	previousImage, nextImage = getPreviousAndNextPost(1, postList)
-// 	if previousImage.Name() != "image1.jpg" {
-// 		t.Error("Expected previousImage", "image1.jpg", "got", previousImage)
-// 	}
-// 	if nextImage.Name() != "image3.jpg" {
-// 		t.Error("Expected nextImage", "image3.jpg", "got", nextImage.Name())
-// 	}
-
-// 	// Test for end of list
-// 	previousImage, nextImage = getPreviousAndNextPost(3, postList)
-// 	if previousImage.Name() != "image3.jpg" {
-// 		t.Error("Expected previousImage", "image3.jpg", "got", previousImage)
-// 	}
-// 	if nextImage != nil {
-// 		t.Error("Expected nextImage", nil, "got", nextImage)
-// 	}
-// }
-
-type FakeError struct{}
-
-func (error FakeError) Error() string {
-	return "Fake Error"
-}
-
-func TestCheck(t *testing.T) {
-	var e error
-	res := check(e)
-	if res != 0 {
-		t.Error("Expected 0 for res", res)
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			//fmt.Println("Recovered check", r)
-		}
-	}()
-
-	var fakeError FakeError
-	res = check(fakeError)
-	if res != 0 {
-		t.Error("Expected panic for fake error", res)
-	}
-}
 
 func Test_getTaken(t *testing.T) {
 	type args struct {
@@ -148,4 +34,39 @@ func Test_getTaken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func shouldExist(t *testing.T, file string) {
+	_, err := os.Stat(file)
+	if errors.Is(err, os.ErrNotExist) {
+		t.Errorf("file %s should exist but doesn't", file)
+	}
+}
+
+func Test_importGallery(t *testing.T) {
+	site := "./test/sample-site"
+	err := os.RemoveAll(site)
+	if err != nil {
+		t.Errorf("RemoveAll() failed %v", err)
+	}
+	err = os.MkdirAll(filepath.Join(site, "content", "gallery"), 0755)
+	if err != nil {
+		t.Errorf("MkdirAll() failed %v", err)
+	}
+	err = os.MkdirAll(filepath.Join(site, "assets", "images"), 0755)
+	if err != nil {
+		t.Errorf("MkdirAll() failed %v", err)
+	}
+	section := "gallery/a/b/c"
+	contentPath := filepath.Join(site, "content", section)
+	importGallery(filepath.Join(site, "assets"), "./test/source/a/b/c", Gallery{
+		title:       "test gallery",
+		section:     section,
+		contentPath: contentPath,
+	})
+
+	shouldExist(t, filepath.Join(contentPath, "d.jpg"))
+	shouldExist(t, filepath.Join(site, "content", "gallery", "a.md"))
+	shouldExist(t, filepath.Join(site, "content", "gallery", "a/b.md"))
+	shouldExist(t, filepath.Join(site, "content", "gallery", "a/b/c/index.md"))
 }

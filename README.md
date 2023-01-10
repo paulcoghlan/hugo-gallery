@@ -1,26 +1,13 @@
-# [Hugo](http://hugo.spf13.com) image gallery generator
+# [Hugo](http://hugo.spf13.com) gallery importer
 
-This tool will create a new posts directory containing a markdown file for each image in source directory allowing for an ordered slide show.
+This tool will copy over the image files from a directory into a given Hugo target directory and create a new markdown gallery post.
 
 ## Usage
-`hugo-gallery <Source Path> <Destination Section> <Title> [BaseUrl]`
+
+`HUGO_DIR=<Hugo Site> hugo-gallery <Source Images Path> <Target Section> <Title>`
 
 ## Example
 
-`hugo-gallery static/images/vacation-photos hawaii "Hawaii Trip"`
+e.g.: `HUGO_DIR=$HOME/mysite hugo-gallery /Volumes/photos/photos/exports/2022/nice gallery/2022/nice "Nice Vacation"`
 
-Visit `localhost:1313/hawaii` to view the content.
-
-This would read all of the images out of the `static/images/vacation-photos` directory and create a new folder named `hawaii` in `content/hawaii` filled with front matter markdown files. See sample below for details.
-
-### Markdown Sample
-
-```yml
----
----
-```
-
-## Todo:
-
-## License
-* MIT
+Visit `localhost:1313/gallery/2022/nice` to view the content.

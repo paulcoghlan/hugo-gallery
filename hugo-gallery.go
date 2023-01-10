@@ -42,6 +42,12 @@ type PostItem struct {
 	Cover          string
 }
 
+type Gallery struct {
+	title       string
+	section     string
+	contentPath string
+}
+
 func check(e error) int {
 	result := 0
 	if e != nil {
@@ -56,7 +62,7 @@ func check(e error) int {
 func main() {
 	if len(os.Args) < 4 {
 		// e.g. hugo-gallery /mnt/d/photos/2022/hawaii gallery/2022/hawaii "Hawaii Trip"
-		fmt.Printf("Usage: HUGO_DIR=$HOME/personal/pixse1 %s <Source Path> <Destination Section> <Title>\n", os.Args[0])
+		fmt.Printf("Usage: HUGO_DIR=$HOME/mysite %s <Source Path> <Destination Section> <Title>\n", os.Args[0])
 		syscall.Exit(1)
 	}
 
@@ -66,12 +72,22 @@ func main() {
 	section := os.Args[2]
 	title := os.Args[3]
 	contentPath := filepath.Join(hugoDir, "content", section)
+	importGallery(
+		assetsDir,
+		sourcePath,
+		Gallery{
+			title:       title,
+			section:     section,
+			contentPath: contentPath,
+		})
+}
 
-	src, err := os.Stat(contentPath)
+func importGallery(assetsDir string, sourcePath string, gallery Gallery) {
+	src, err := os.Stat(gallery.contentPath)
 	if err != nil || !src.IsDir() {
-		err = os.MkdirAll(contentPath, 0755)
+		err = os.MkdirAll(gallery.contentPath, 0755)
 		if err != nil {
-			fmt.Printf("content directory <%s> not found! Are you in a hugo directory?\n", contentPath)
+			fmt.Printf("content directory <%s> not found! Are you in a hugo directory?\n", gallery.contentPath)
 			os.Exit(1)
 		}
 	}
@@ -92,25 +108,25 @@ func main() {
 				continue
 			}
 			coverImage = file.Name()
-			err = copyFile(filepath.Join(sourcePath, file.Name()), filepath.Join(contentPath, file.Name()))
+			err = copyFile(filepath.Join(sourcePath, file.Name()), filepath.Join(gallery.contentPath, file.Name()))
 			if err != nil {
 				fmt.Printf("Failed to copy %s\n", file.Name())
 				os.Exit(1)
 			}
 		}
 	}
-	generateGallery(contentPath, title, coverImage, latestModified)
+	generateGallery(gallery.contentPath, gallery.title, coverImage, latestModified)
 
-	collectionExists := parentPost(contentPath)
-	fmt.Printf("contentPath is %s, collectionExists is %v\n", contentPath, collectionExists)
+	collectionExists := parentPost(gallery.contentPath)
+	fmt.Printf("contentPath is %s, collectionExists is %v\n", gallery.contentPath, collectionExists)
 
 	// Walk up directory tree from `contentPath` to ./gallery to see if we need to create a `/content/gallery/<collectionName>.md`
-	collectionDir := parentDir(contentPath)
+	collectionDir := parentDir(gallery.contentPath)
 	for !collectionExists && (filepath.Base(collectionDir) != "gallery") {
 		baseDir := filepath.Dir(collectionDir)
 		collectionName := filepath.Base(collectionDir)
 		fmt.Printf("collectionDir: %s, baseDir: %s, collectionName %s\n", collectionDir, baseDir, collectionName)
-		generateCollection(sourcePath, assetsDir, baseDir, title, coverImage, latestModified, collectionName)
+		generateCollection(sourcePath, assetsDir, baseDir, gallery.title, coverImage, latestModified, collectionName)
 		collectionDir = parentDir(collectionDir)
 	}
 }
