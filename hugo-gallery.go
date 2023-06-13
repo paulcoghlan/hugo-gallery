@@ -104,10 +104,14 @@ func importGallery(assetsDir string, sourcePath string, gallery Gallery) {
 		fileName := strings.ToLower(file.Name())
 		// Ignore directories and .DS files
 		if !file.IsDir() && strings.Index(fileName, ".") > 0 {
-			if strings.Index(fileName, ".jpg") == -1 {
+			if !strings.Contains(fileName, ".jpg") {
 				continue
 			}
 			coverImage = file.Name()
+			taken := getTaken(filepath.Join(sourcePath, file.Name()))
+			if latestModified.Before(taken) {
+				latestModified = taken
+			}
 			err = copyFile(filepath.Join(sourcePath, file.Name()), filepath.Join(gallery.contentPath, file.Name()))
 			if err != nil {
 				fmt.Printf("Failed to copy %s\n", file.Name())
@@ -143,15 +147,12 @@ func parentPost(contentPath string) bool {
 	parentMD := parentDir + ".md"
 	md, err := os.Stat(parentMD)
 	fmt.Printf("parentMD is %s, md is: %v\n", parentMD, md)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func generateGallery(contentPath string, title string, coverImage string, date time.Time) {
 	galleryItem := PostItem{
-		Title: title,
+		Title: cleanupTitle(title),
 		Date:  date.Format("2006-01-02"),
 		Cover: coverImage,
 	}
@@ -164,9 +165,11 @@ func generateGallery(contentPath string, title string, coverImage string, date t
 	f, err := os.Create(filePath)
 	check(err)
 	defer f.Close()
-	f.Sync()
+	err = f.Sync()
+	check(err)
 	w := bufio.NewWriter(f)
-	w.WriteString(buffer.String())
+	_, err = w.WriteString(buffer.String())
+	check(err)
 	w.Flush()
 }
 
@@ -181,10 +184,11 @@ func generateGalleryPost(galleryItem PostItem, buffer *bytes.Buffer) {
 func generateCollection(sourcePath string, assetsDir string, parentPath string, title string, coverImage string, date time.Time, collectionName string) {
 	contentImage := fmt.Sprintf("images/%s-%s", strings.ToLower(collectionName), coverImage)
 	collectionItem := PostItem{
-		Title: collectionName,
+		Title: cleanupTitle(collectionName),
 		Date:  date.Format("2006-01-02"),
 		Cover: contentImage,
 	}
+	fmt.Printf("collectionItem %v\n", collectionItem)
 
 	// Copy coverImage to /images/collectionName-imagename
 	err := copyFile(filepath.Join(sourcePath, coverImage), filepath.Join(assetsDir, contentImage))
@@ -198,10 +202,16 @@ func generateCollection(sourcePath string, assetsDir string, parentPath string, 
 	f, err := os.Create(filePath)
 	check(err)
 	defer f.Close()
-	f.Sync()
+	err = f.Sync()
+	check(err)
 	w := bufio.NewWriter(f)
-	w.WriteString(buffer.String())
+	_, err = w.WriteString(buffer.String())
+	check(err)
 	w.Flush()
+}
+
+func cleanupTitle(input string) string {
+	return strings.Replace(input, "-", " ", -1)
 }
 
 func generateCollectionPost(galleryItem PostItem, buffer *bytes.Buffer) {

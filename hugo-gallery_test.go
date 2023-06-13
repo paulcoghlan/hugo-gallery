@@ -60,7 +60,7 @@ func Test_importGallery(t *testing.T) {
 	section := "gallery/a/b/c"
 	contentPath := filepath.Join(site, "content", section)
 	importGallery(filepath.Join(site, "assets"), "./test/source/a/b/c", Gallery{
-		title:       "test gallery",
+		title:       "test-gallery",
 		section:     section,
 		contentPath: contentPath,
 	})
@@ -69,4 +69,30 @@ func Test_importGallery(t *testing.T) {
 	shouldExist(t, filepath.Join(site, "content", "gallery", "a.md"))
 	shouldExist(t, filepath.Join(site, "content", "gallery", "a/b.md"))
 	shouldExist(t, filepath.Join(site, "content", "gallery", "a/b/c/index.md"))
+}
+
+func Test_cleanupTitle(t *testing.T) {
+	type args struct {
+		input string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "remove -",
+			args: args{
+				input: "test-name",
+			},
+			want: "test name",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanupTitle(tt.args.input); got != tt.want {
+				t.Errorf("cleanupTitle() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
