@@ -103,6 +103,7 @@ func importGallery(assetsDir string, sourcePath string, gallery Gallery) {
 	for _, file := range imgList {
 		fileName := strings.ToLower(file.Name())
 		// Ignore directories and .DS files
+		fmt.Printf("candidate file is %s\n", file.Name())
 		if !file.IsDir() && strings.Index(fileName, ".") > 0 {
 			if !strings.Contains(fileName, ".jpg") {
 				continue
@@ -253,7 +254,8 @@ func getTaken(name string) time.Time {
 
 	x, err := exif.Decode(f)
 	if err != nil && exif.IsCriticalError(err) {
-		log.Fatal(err)
+		log.Println(err)
+		return time.Now()
 	}
 
 	tm, _ := x.DateTime()
